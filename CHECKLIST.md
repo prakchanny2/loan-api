@@ -1,4 +1,4 @@
-# Loan API Verification Checklist
+/loan-api:latest# Loan API Verification Checklist
 
 ## Run the loan API container and open `/docs`
 
