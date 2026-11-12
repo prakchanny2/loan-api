@@ -1,19 +1,9 @@
 """Run from this directory with: python train.py, then python -m pytest -v."""
-import pytest
 from fastapi.testclient import TestClient
 
-from main import APPLICATIONS, app
+from main import app
 
 GOOD = {"amount_usd": 1500, "term_months": 12, "monthly_income_usd": 350.0, "previous_loans": 1, "late_payments": 0}
-TEST_API_KEY = "test-only-api-key-that-is-never-used-in-production"
-
-
-@pytest.fixture
-def client(monkeypatch):
-    monkeypatch.setenv("API_KEY", TEST_API_KEY)
-    APPLICATIONS.clear()
-    with TestClient(app, headers={"X-API-Key": TEST_API_KEY}) as c:  # "with" runs the lifespan
-        yield c
 
 
 def test_health_reports_model_version(client):
@@ -30,12 +20,18 @@ def test_api_key_requires_missing_invalid_and_valid_credentials(client):
     assert client.get("/api/v1/applications").status_code == 200
 
 
-def test_missing_api_key_configuration_fails_closed(monkeypatch):
+def test_missing_api_key_configuration_fails_closed(monkeypatch, api_key):
     monkeypatch.delenv("API_KEY", raising=False)
     with TestClient(app) as client_without_key:
         assert client_without_key.get("/health").status_code == 200
-        response = client_without_key.get("/api/v1/applications", headers={"X-API-Key": TEST_API_KEY})
+        response = client_without_key.get("/api/v1/applications", headers={"X-API-Key": api_key})
     assert response.status_code == 503
+
+
+def test_health_and_docs_are_public():
+    with TestClient(app) as unauthenticated:
+        assert unauthenticated.get("/health").status_code == 200
+        assert unauthenticated.get("/docs").status_code == 200
 
 
 def test_prediction_is_a_probability(client):
