@@ -54,15 +54,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Wait until the live API reports this commit
+        env:
+          APP_URL: ${{ vars.APP_URL }}
         run: |
-          for attempt in $(seq 1 30); do
-            live_sha=$(curl -fsS --max-time 90 "${{ vars.APP_URL }}/health" | python3 -c "import sys, json; print(json.load(sys.stdin).get('git_sha', ''))" || true)
-            if [ "$live_sha" = "${{ github.sha }}" ]; then
+          if [ -z "$APP_URL" ]; then
+            echo "APP_URL repository variable is not configured"
+            exit 1
+
+          fi
+
+          health_url="${APP_URL%/}/health"
+          deadline=$((SECONDS + 900))
+          attempt=0
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            attempt=$((attempt + 1))
+            response=$(curl --silent --show-error --connect-timeout 5 --max-time 15 \
+              --write-out $'\n%{http_code}' "$health_url" 2>/dev/null || true)
+            http_status="${response##*$'\n'}"
+            health_body="${response%$'\n'*}"
+            live_sha=$(printf '%s' "$health_body" | python3 -c \
+              'import json, sys; data = json.load(sys.stdin); print(data.get("git_sha", "") if isinstance(data, dict) else "")' \
+              2>/dev/null || true)
+
+            if [ "$http_status" = "200" ] && [ "$live_sha" = "${{ github.sha }}" ]; then
               echo "Deployed and healthy: $live_sha"
               exit 0
             fi
-            echo "Live version is '$live_sha', waiting ($attempt/30)"
-            sleep 20
+
+            echo "Waiting for deployment: HTTP ${http_status:-000}, SHA '${live_sha:-unavailable}' (attempt $attempt)"
+            sleep 10
           done
-          echo "The new version did not go live in time"
+          echo "The new version did not become healthy within 15 minutes"
           exit 1
