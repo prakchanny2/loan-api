@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 
 class LoanFeatures(BaseModel):
-    amount_usd: int = Field(gt=0, le=9000)
+    amount_usd: int = Field(gt=0, le=8000)
     term_months: Literal[3, 6, 12, 18, 24]
     monthly_income_usd: float = Field(gt=0)
     previous_loans: int = Field(ge=0)
